@@ -30,6 +30,7 @@ def loadCensus():
     data=json.loads(response.text)
     df= pd.DataFrame(data[1:], columns=data[0])
     df['county_fips']=(df['state']+df['county']).astype(int)
+    df['POP']=df['POP'].astype(int)
     return df
     
 def makeCountyDF():
@@ -38,7 +39,7 @@ def makeCountyDF():
     Add per capita columns.'''
     countyCOVID=load_NYTCOVID()
     countyPops = loadCensus()
-    df=countyPops.merge(countyCOVID, left_on='county+fips', right_on='fips', how='left')
+    df=countyPops.merge(countyCOVID, left_on='county_fips', right_on='fips', how='left')
     df['date']=pd.to_datetime(df['date'])
     df=df.rename(columns={'POP': 'population'})
     df['cases_per_cap']=df['cases']/df['population']
