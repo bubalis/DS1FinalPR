@@ -10,32 +10,6 @@ import pandas as pd
 import numpy as np
 import datetime
 import data_mgmt
-
-
-
-pd.set_option('display.expand_frame_repr', False)
-pd.set_option('display.precision', 2)
-
-
-
-
-def fill_blank_dates_counties(df):
-    '''Fill in dates where county is not present with 0s for cases and deaths'''
-    counties=df['fips'].unique()
-    to_add=[]
-    for county in counties:
-        county_data={column: df[df['fips']==county][column].min() for column in 
-                         ['population', 'COUNTY', 'STATE', 'fips', 'county', 'state']}
-        for date in df['date'].unique():
-            that_date=df[df['date']==date]
-            if county not in that_date['fips'].unique():
-                to_add.append({**county_data, **{'deaths':0, 'cases':0, 'date': date, 
-                                                 'cases_per_cap':0, 'deaths_per_cap':0}})
-    df=df.append(to_add)
-    return df
-
-
-
 #%%
 
 
@@ -64,12 +38,6 @@ def CDFpop(s_df, valcol, popcol, **kwargs):
     Y=[np.sum(pops[:i+1])/N for i in range(len(X))]
     ax.plot(X, Y, '-', **kwargs)
     
-fig=plt.figure()
-states=['Massachusetts', 
-              'Maine', 'South Dakota', 
-              'Georgia', 'Idaho', 'California',
-              'Illinois',
-              'Vermont', 'New York']
 
 def all_CDF_pop(df, states, savename='counties_CDF.png'):
     fig=plt.figure()
@@ -110,6 +78,12 @@ def state_gini_overtime(state):
 
 
 if __name__=='__main__':
+    states=['Massachusetts', 
+              'Maine', 'South Dakota', 
+              'Georgia', 'Idaho', 'California',
+              'Illinois',
+              'Vermont', 'New York']
+
     df=data_mgmt.makeCountyDF()
     df=data_mgmt.fill_blank_dates_counties(df)
     all_lorenzpop(df[df['date']==df['date'].max()], states, 'state')   

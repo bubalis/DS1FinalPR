@@ -11,15 +11,48 @@ import json
 import numpy as np
 import os
 
+
+
+def NYT_fixes(df):
+    df['fips']=np.where((df['county']=="New York City"), 36999, df['fips']) #fix issue with New York City
+    df['fips']=np.where((df['county']=="Kansas City"), 29999, df['fips']) #fix issue with Kansas City
+    df.dropna(subset=['fips'], inplace=True)
+    df['fips']=df['fips'].astype(int)
+    return df
+
 def load_NYTCOVID():
     '''Load current county data from NYT covid as dataframe'''
-    return pd.read_csv('https://github.com/nytimes/covid-19-data/raw/master/us-counties.csv')
+    return NYT_fixes(pd.read_csv('https://github.com/nytimes/covid-19-data/raw/master/us-counties.csv'))
 
 
 def retrieve_covidTracker():
     '''Load current state-level data from Covid-Tracker Website and return as dataframe'''
     response=requests.get('https://covidtracking.com/api/states/daily')
     return pd.DataFrame(json.loads(response.text))
+
+
+
+def censusfixes(df):
+    '''Make fixes to census data to fit with anamolies in NYT data.'''
+    
+    nyboroughs=df[df['county_fips'].isin([36005, 36047, 36061, 36081, 36085])]
+    nycpop=nyboroughs['POP'].sum()
+    nyc_density=((nyboroughs['POP']*nyboroughs['DENSITY']).sum())/nycpop
+    df=df.append({'state': 36, 
+                  'county':999, 
+                  'county_fips': 36999, 
+                  "DENSITY":nyc_density, 
+                  'POP': nycpop}, 
+    ignore_index=True)
+    #create separate county for kansas city
+    df=df.append({'state': 29, 
+                  'county':999, 
+                  'county_fips': 29999,
+                  "DENSITY": 1400,  #est from wikipedia
+                  'POP': 491918 }, #est from wikipedia
+    ignore_index=True)
+    return df
+    
 
 
 
@@ -31,8 +64,13 @@ def loadCensus():
     df= pd.DataFrame(data[1:], columns=data[0])
     df['county_fips']=(df['state']+df['county']).astype(int)
     df['POP']=df['POP'].astype(int)
-    return df
+    df.dropna(subset=['DENSITY'])
+    df["DENSITY"]=df["DENSITY"].astype(float)
+    return censusfixes(df)
+ 
+
     
+
 def makeCountyDF():
     '''Get data from NYT covid and from census. 
     Merge Data Together
