@@ -11,10 +11,24 @@ import json
 import numpy as np
 import os
 
+#define state_abbrvs
+with open(os.path.join('data', 'state_abbrvs.txt')) as f:
+    state_abbrvs=json.loads(f.read())
 
+#define state_fips 
+with open(os.path.join('data', 'state_fips.txt')) as f:
+    state_fips=json.loads(f.read())
+    
+def abbrv_to_fips(abbrv):
+    'Give a state abbreviation.''' 
+    return state_fips[state_abbrvs[abbrv]]
 
 def NYT_fixes(df):
-    df['fips']=np.where((df['county']=="New York City"), 36999, df['fips']) #fix issue with New York City
+    '''Fix NYTimes dataset for two issues.
+    NYC and Kansas City'''
+    #fix issue with New York City: assign County Fips of 999 to whole city
+    df['fips']=np.where((df['county']=="New York City"), 36999, df['fips']) 
+    #fix issue with Kansas City assign County Fips of 999 to whole city
     df['fips']=np.where((df['county']=="Kansas City"), 29999, df['fips']) #fix issue with Kansas City
     df.dropna(subset=['fips'], inplace=True)
     df['fips']=df['fips'].astype(int)
@@ -68,6 +82,17 @@ def loadCensus():
     df["DENSITY"]=df["DENSITY"].astype(float)
     return censusfixes(df)
  
+def getMostCurrentRecords(df, datecol, geo_col):
+    '''Make a dataFrame of most current records for each geography 
+    Input df: dataframe
+    datecol: name of column with dates.
+    geo_col: column with geography names'''
+    newDF=pd.DataFrame()
+    for name in df[geo_col].unique():
+        subset=df[df[geo_col]==name]
+        newDF=newDF.append(
+                subset[subset[datecol]==subset[datecol].max()])
+    return newDF
 
     
 
@@ -93,7 +118,7 @@ def fill_blank_dates_counties(df):
     to_add=[]
     for county in counties:
         county_data={column: df[df['fips']==county][column].min() for column in 
-                         ['population', 'COUNTY', 'STATE', 'fips', 'county', 'state']}
+                         ['population', 'county_x', 'state_x', 'fips', 'county_y', 'state_y']}
         for date in df['date'].unique():
             that_date=df[df['date']==date]
             if county not in that_date['fips'].unique():

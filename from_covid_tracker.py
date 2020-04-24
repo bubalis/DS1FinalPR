@@ -15,6 +15,9 @@ import matplotlib.pyplot as plt
 import os
 import csv
 from matplotlib.dates import DayLocator, DateFormatter
+import data_mgmt
+
+
 #%%
 
 today=datetime.combine(date.today(), datetime.min.time())
@@ -80,6 +83,7 @@ def state_subset(state_abbrv, df, pop, interval=7):
         df[f'{column} % change']=df[column].pct_change()
         df[f'{column} Rolling % change']=avgGrowthrate(df, column, interval).replace([np.inf, -np.inf], np.nan)    
         df[f'{column} Doubling time']=df[f'{column} Rolling % change'].apply(doublingTime)
+        df[f'{column} Per Capita']=df[column]/pop
     df['Positive Rate']=df['Cases']/df['Tests Performed']
     df['7day Rolling Avg Positive Rate']=df['Cases'].diff(7)/df['Tests Performed'].diff(7)
     
@@ -90,6 +94,8 @@ def state_subset(state_abbrv, df, pop, interval=7):
         df[f'{name} Doubling time']=df[f'{name} Doubling time'].apply(zeroToNaN)
     df['Positive Rate'].apply(zeroToNaN)
     df['7day Rolling Avg Positive Rate'].apply(zeroToNaN)
+    df['state_fips']=data_mgmt.abbrv_to_fips(state_abbrv)
+    df['c_ifr']=df['Deaths']/df["Cases"]
     
     return df
 
@@ -129,7 +135,7 @@ def getCurrentData():
     df=retrieve_data()
     df.to_csv(os.path.join('data', 'covid_tracker_orig.csv'))
     df=reformatdf(df)
-    state_dict=loadNames()
+    state_dict=data_mgmt.state_abbrvs
     pop_dict=read_pops()
     new_df=pd.DataFrame()
     for state in state_dict:

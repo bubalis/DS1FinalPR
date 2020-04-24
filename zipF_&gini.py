@@ -10,12 +10,19 @@ import pandas as pd
 import numpy as np
 import datetime
 import data_mgmt
+import from_covid_tracker
+import os
 #%%
 
 
 
 def pop_lorenz(s_df, valcol, popcol, sort_col, **kwargs):
-    '''Plot the cumulative distribution function of a variable.'''
+    '''Plot the cumulative distribution function of a variable.
+    s_df: the subseted dataframe.
+    valcol: the variable to plot.
+    popcol: the population column.
+    column to sort on (should be valcol per capita.
+    pass any plotting **kwargs desired to plot function.'''
     ax=plt.gca()
     s_df=s_df.dropna(subset=[valcol]).sort_values(sort_col)
     Y=(s_df[valcol].cumsum()/s_df[valcol].sum()).to_numpy()
@@ -28,7 +35,7 @@ def pop_lorenz(s_df, valcol, popcol, sort_col, **kwargs):
 
 
 def CDFpop(s_df, valcol, popcol, **kwargs):
-    '''Plot the cumulative distribution function of a variable.'''
+    '''Plot the population-adjusted cumulative distribution function of a variable.'''
     ax=plt.gca()
     s_df=s_df.sort_values(valcol).dropna(subset=[valcol])
     X=s_df[valcol].tolist()
@@ -40,6 +47,7 @@ def CDFpop(s_df, valcol, popcol, **kwargs):
     
 
 def all_CDF_pop(df, states, savename='counties_CDF.png'):
+    '''Make a multiple-CDF of the pop-adjusted CDF.'''
     fig=plt.figure()
     for state in states: 
         sdf=df[df['state']==state]
@@ -52,6 +60,11 @@ def all_CDF_pop(df, states, savename='counties_CDF.png'):
     plt.show()
     
 def all_lorenzpop(df, subsets, subset_col, savename='counties_by_date', subset_labels=[]):
+    '''Make a population adjusted lorenz curve of data from df.
+    subset_col: the column with the subset labels.
+    subsets: a list of labels to extract and plot.
+    If different legend lables are desired, pass them as list subset_labels.'''
+    
     fig=plt.figure()
     for sub in subsets: 
         sdf=df[df[subset_col]==sub]
@@ -63,19 +76,24 @@ def all_lorenzpop(df, subsets, subset_col, savename='counties_by_date', subset_l
     plt.plot(np.linspace(0,1, 500), np.linspace(0,1, 500), '-k' )
     plt.xlabel('Proportion of people')
     plt.ylabel('Proportion of Cases')
-    plt.savefig(f'{savename}.png')
+    plt.savefig(os.path.join('figures', '{savename}.png'))
     
     plt.show()
 
 def state_gini_overtime(state):
-    subset=df[df['state']==state]
+    '''Show the change in the gini of infection rates over a time-series.'''
+    
+    subset=df[df['state_y']==state]
     start_date=subset[subset['cases']>0]['date'].min()
     days_elapsed=(subset['date'].max()-start_date).days
-    interval=int(days_elapsed/6)
+    interval=int(days_elapsed/6) #set interval so that 
+    
     days=[start_date+datetime.timedelta(days=i) for i in range(0, days_elapsed, interval)]
     subset_labels=[datetime.datetime.strftime(day, '%m/%d') for day in days]
     all_lorenzpop(subset, subsets=days, subset_col='date', savename=f'{state}_by_date',subset_labels=subset_labels) 
 
+def dateFormatter(string):
+    return datetime.datetime.strptime(string, '%Y-%m-%d')
 
 if __name__=='__main__':
     states=['Massachusetts', 
@@ -83,10 +101,13 @@ if __name__=='__main__':
               'Georgia', 'Idaho', 'California',
               'Illinois',
               'Vermont', 'New York']
-
-    df=data_mgmt.makeCountyDF()
+    df=pd.read_csv(os.path.join('data', 'covid_by_county.csv'))
+    df=df.dropna(subset=['date'])
+    df['date']=df['date'].apply(dateFormatter)
+    print('filling in blank data''')
     df=data_mgmt.fill_blank_dates_counties(df)
-    all_lorenzpop(df[df['date']==df['date'].max()], states, 'state')   
+    
+    all_lorenzpop(df[df['date']==df['date'].max()], states, 'state_y')   
     state_gini_overtime('Maine')  
     state_gini_overtime('North Dakota')
 
