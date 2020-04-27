@@ -49,7 +49,7 @@ def parse_num(string):
 
 def read_pops():
     '''Get state population Data from csv'''
-    with open('state_pops.csv') as csv_file:
+    with open(os.path.join('data','state_pops.csv')) as csv_file:
         reader=csv.reader(csv_file)
         pop_dic={}
         for line in [line  for line in reader][1:]:
@@ -72,7 +72,7 @@ def zeroToNaN(number):
 
 def state_subset(state_abbrv, df, pop, interval=7):
     '''Grab data from 1 state and perform analyses on it.
-    Return a dataframe with these analyses.'''
+    Return a dataframe with extra analyses.'''
     
     df=df[df['state']==state_abbrv]
     df.set_index('Date', inplace=True)

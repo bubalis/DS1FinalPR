@@ -10,6 +10,8 @@ import requests
 import json
 import numpy as np
 import os
+import matplotlib.pyplot as plt
+from scipy.stats import linregress
 
 #define state_abbrvs
 with open(os.path.join('data', 'state_abbrvs.txt')) as f:
@@ -71,12 +73,12 @@ def censusfixes(df):
 
 
 def loadCensus():
-    '''Load and format census data for: Poulation and population density from Census.
+    '''Load and format census data for: Population and population density from Census.
     Return as a dataframe'''
     response=requests.get('https://api.census.gov/data/2019/pep/population?get=DENSITY&POP&for=county:*')
     data=json.loads(response.text)
     df= pd.DataFrame(data[1:], columns=data[0])
-    df['county_fips']=(df['state']+df['county']).astype(int)
+    df['county_fips']=(df['state']+df['county']).astype(int) #make combined county fips code
     df['POP']=df['POP'].astype(int)
     df.dropna(subset=['DENSITY'])
     df["DENSITY"]=df["DENSITY"].astype(float)
@@ -127,7 +129,109 @@ def fill_blank_dates_counties(df):
     df=df.append(to_add)
     return df
 
+def logTransform(df,xcol, ycol):
+    '''Drop 0 values and return x and y log transformed.'''
+    non_0=df[(df[xcol]>0) & (df[ycol]>0)].dropna()
+    return np.log(non_0[xcol]), np.log(non_0[ycol])
+
+
+def plot(df, x, y, loglog=False):
+    '''Plot x and y from a dataframe, excluding any 0 or NA values.
+    Plot a trendline, print its slope and r_value. 
+    Return slope and intercept.
+    If loglog=True, plot log(x) log(y)'''
+    
+    if loglog:
+        x, y=logTransform(df, x,y)
+    else:
+        df=df[(df[x]>0) & (df[y]>0)].dropna()
+        x=df[x]
+        y=df[y]
+    
+    slope, intercept, r_value, p_value, std_err=linregress(x,y)
+    print(slope, r_value)
+    plt.scatter(x, y)
+    plt.plot(x, x*slope+intercept, '-k')
+    return slope, intercept
+
+
+
+
+def prepCBSAs(cbsa_df):
+    def primary_code(row):
+        '''Assign PSA code to a row in the df'''
+        if not (str(row['CSA Code'])=='nan') or str(row['CSA Code'])=='':
+            return row['CSA Code']
+        else:
+            return row['CBSA Code']
+    
+    def primary_name(row):
+        '''Assign PSA Name to a row in the df'''
+        if not (str(row['CSA Title'])=='nan') or str(row['CSA Title'])=='':
+            return row['CSA Title']
+        else:
+            return row['CBSA Title']
+        
+        
+        
+    cbsa_df=cbsa_df.dropna(subset=['FIPS State Code'])
+    cbsa_df['full_fips']=(cbsa_df['FIPS County Code']+cbsa_df['FIPS State Code']*1000).astype(int)
+    
+    #correction for NYC data: In NYT county Data, all boroughs merged into
+    #one county called "New York City"
+    cbsa_df=cbsa_df.append({'CBSA Code': 35620, 
+                  'Metropolitan/Micropolitan Statistical Area': 'Metropolitan Statistical Area',
+                 'full_fips':36999, 
+                 'Central/Outlying County': 'Central', 
+                 'CBSA Title': 'New York-Newark-Jersey City, NY-NJ-PA',
+                 'CSA Title':   'New York-Newark, NY-NJ-CT-PA',
+                 'CSA Code': 408}, ignore_index=True)
+    
+    #correction for KC data: all cases/deaths in any County in Kansas City MO
+    #Are recorded as occuring in "Kansas City"
+    #But all of these counties have areas outside of KC
+    cbsa_df=cbsa_df.append({'CBSA Code': 28140, 
+                  'Metropolitan/Micropolitan Statistical Area': 'Metropolitan Statistical Area',
+                 'full_fips':20999, 
+                 'Central/Outlying County': 'Central', 
+                 'CBSA Title': 'Kansas City, MO-KS',
+                  'CSA Title':   'Kansas City-Overland Park-Kansas City, MO-KS',
+                 'CSA Code':312
+                 }, ignore_index=True
+            )
+    
+    #assign PSA codes and titles
+    cbsa_df['PSA Code']=cbsa_df.apply(primary_code, axis=1)
+    cbsa_df['PSA Title']=cbsa_df.apply(primary_name, axis=1)
+    return cbsa_df
+
+
+def df_by_CBSA(county_df, kind='CBSA'):
+    '''Make a dataframe that has data organized by Census Bureau Statistical Areas.
+    Pass the dataframe that has the county data.
+    For kind: pass CBSA, CSA or PSA. 
+    CBSA: Aggregate by core-based statistical area (Metropolitan or Micropolitan)
+    CSA: Aggregate by Combined Statistical Area.
+    PSA: Aggregate by Primary statistical Area: CSA if applicable, CBSA if not.
+    '''    
+    
+    df=pd.read_csv(os.path.join('data', 'metro_areas.csv'), encoding='latin-1')
+    df=prepCBSAs(df)
+    
+    groupby_column=f'{kind} Title'
+        
+    county_df=county_df.merge(df, left_on='fips', right_on='full_fips', how='left')
+    
+    #make dataframe with area totals by date
+    groups=county_df.groupby([groupby_column, 'date'])
+    gdf=pd.DataFrame([groups['population'].sum(), groups['cases'].sum(), groups['deaths'].sum()]).T
+    gdf['cases per thousand']=gdf['cases']/gdf['population']*1000
+    gdf=gdf.reset_index()
+    
+    return gdf
 
 if __name__=='__main__':
     df=makeCountyDF()
     df.to_csv(os.path.join('data', 'covid_by_county.csv'))
+    CBSA_df=df_by_CBSA(df)
+    CBSA_df.to_csv(os.path.join('data', 'covid_by_CBSA.csv'))

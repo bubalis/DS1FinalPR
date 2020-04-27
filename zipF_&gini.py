@@ -10,14 +10,11 @@ import pandas as pd
 import numpy as np
 import datetime
 import data_mgmt
-import from_covid_tracker
 import os
 #%%
 
-
-
 def pop_lorenz(s_df, valcol, popcol, sort_col, **kwargs):
-    '''Plot the cumulative distribution function of a variable.
+    '''Plot a population-ajdusted lorenz curve of a variable.
     s_df: the subseted dataframe.
     valcol: the variable to plot.
     popcol: the population column.
@@ -76,7 +73,7 @@ def all_lorenzpop(df, subsets, subset_col, savename='counties_by_date', subset_l
     plt.plot(np.linspace(0,1, 500), np.linspace(0,1, 500), '-k' )
     plt.xlabel('Proportion of people')
     plt.ylabel('Proportion of Cases')
-    plt.savefig(os.path.join('figures', '{savename}.png'))
+    plt.savefig(os.path.join('figures', f'{savename}.png'))
     
     plt.show()
 
@@ -92,6 +89,7 @@ def state_gini_overtime(state):
     subset_labels=[datetime.datetime.strftime(day, '%m/%d') for day in days]
     all_lorenzpop(subset, subsets=days, subset_col='date', savename=f'{state}_by_date',subset_labels=subset_labels) 
 
+
 def dateFormatter(string):
     return datetime.datetime.strptime(string, '%Y-%m-%d')
 
@@ -106,7 +104,6 @@ if __name__=='__main__':
     df['date']=df['date'].apply(dateFormatter)
     print('filling in blank data''')
     df=data_mgmt.fill_blank_dates_counties(df)
-    
     all_lorenzpop(df[df['date']==df['date'].max()], states, 'state_y')   
     state_gini_overtime('Maine')  
     state_gini_overtime('North Dakota')

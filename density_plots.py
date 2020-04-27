@@ -62,20 +62,24 @@ def plotter(df, xcol, ycol, loglog=False, **kwargs):
     
     return slope, intercept, r_value, std_err
 
-results={}
 
 
-comparisons=[('population', 'deaths'), 
-             ('DENSITY', 'crude_ifr'),
-             ('DENSITY', 'cases per million'),
-             ('DENSITY', 'deaths per million'),
-             ('cases per million', 'deaths per million')]
-             
-             
-             
-for xcol, ycol in comparisons: 
-    slope, intercept, r_value, std_err = plotter(cur, xcol, ycol,  False)
-    slope, intercept, r_value, std_err = plotter(cur, xcol, ycol, True)
+
+if __name__=='__main__':
+    results={}
+    
+    
+    comparisons=[('population', 'deaths'), 
+                 ('DENSITY', 'crude_ifr'),
+                 ('DENSITY', 'cases per million'),
+                 ('DENSITY', 'deaths per million'),
+                 ('cases per million', 'deaths per million')]
+                 
+                 
+                 
+    for xcol, ycol in comparisons: 
+        slope, intercept, r_value, std_err = plotter(cur, xcol, ycol,  False)
+        slope, intercept, r_value, std_err = plotter(cur, xcol, ycol, True)
 
 
 
