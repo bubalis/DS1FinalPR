@@ -20,7 +20,9 @@ with open(os.path.join('data', 'state_abbrvs.txt')) as f:
 #define state_fips 
 with open(os.path.join('data', 'state_fips.txt')) as f:
     state_fips=json.loads(f.read())
-    
+
+
+ 
 def abbrv_to_fips(abbrv):
     'Give a state abbreviation.''' 
     return state_fips[state_abbrvs[abbrv]]
@@ -83,7 +85,12 @@ def loadCensus():
     df.dropna(subset=['DENSITY'])
     df["DENSITY"]=df["DENSITY"].astype(float)
     return censusfixes(df)
- 
+
+countyPops = loadCensus() 
+
+
+    
+
 def getMostCurrentRecords(df, datecol, geo_col):
     '''Make a dataFrame of most current records for each geography 
     Input df: dataframe
@@ -103,7 +110,6 @@ def makeCountyDF():
     Merge Data Together
     Add per capita columns.'''
     countyCOVID=load_NYTCOVID()
-    countyPops = loadCensus()
     df=countyPops.merge(countyCOVID, left_on='county_fips', right_on='fips', how='left')
     df['date']=pd.to_datetime(df['date'])
     df=df.rename(columns={'POP': 'population'})
@@ -215,18 +221,28 @@ def df_by_CBSA(county_df, kind='CBSA'):
     PSA: Aggregate by Primary statistical Area: CSA if applicable, CBSA if not.
     '''    
     
+    groupby_column=f'{kind} Title'
+    
     df=pd.read_csv(os.path.join('data', 'metro_areas.csv'), encoding='latin-1')
     df=prepCBSAs(df)
     
-    groupby_column=f'{kind} Title'
+    area_pops=df.merge(countyPops, left_on='full_fips', right_on='county_fips', how='left')
+    area_pops=area_pops[area_pops['full_fips'].isin([36999, 20999])==False]
+    area_pops=area_pops.groupby([groupby_column])['POP'].sum().reset_index()
+    
+    
+    
         
-    county_df=county_df.merge(df, left_on='fips', right_on='full_fips', how='left')
+    county_df=county_df.merge(df, left_on='fips', right_on='full_fips', how='outer')
     
     #make dataframe with area totals by date
     groups=county_df.groupby([groupby_column, 'date'])
-    gdf=pd.DataFrame([groups['population'].sum(), groups['cases'].sum(), groups['deaths'].sum()]).T
-    gdf['cases per thousand']=gdf['cases']/gdf['population']*1000
+    gdf=pd.DataFrame([ groups['cases'].sum(), groups['deaths'].sum()]).T
     gdf=gdf.reset_index()
+    gdf=gdf.merge(area_pops, right_on=groupby_column, left_on=groupby_column, how='outer')
+    gdf=gdf.rename(columns={'POP': 'population'})
+    gdf['cases per thousand']=gdf['cases']/gdf['population']*1000
+    
     
     return gdf
 
