@@ -39,6 +39,8 @@ def load_MSA_for_SIR(name, nameCol='CSA Title', infect_time=11):
     Returns a df with dates, and columns for s, i and r'''
     
     subset=df[df[nameCol].str.contains(name)]
+    assert len(subset[nameCol].unique())==1, f"Invalid name {name} matches either more than 1 or 0 values for {nameCol}"
+    
     subset['s']=subset['population']-subset['cases'] #Number of people who haven't had it yet. 
     subset['r']=subset['cases'].shift(infect_time).fillna(0) #assumes that all infections last exactly the length that is passed
     subset['i']=subset['population']-subset['r']-subset['s']

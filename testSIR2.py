@@ -52,7 +52,7 @@ def SIR_wDR_diffeq(x,t,theta):
 # Set time range
 time_range = np.arange(1,11)     # I'm just using 10 steps
 # Load actual data
-data=analyze_metros.load_MSA('New York')
+data=analyze_metros.load_MSA_for_SIR('New York')
 
 #X= [np.array([999,997,996,994,993,992,990,989,986,984]),
  #   np.array([1,2,5,6,7,8,9,11,13,15])]     # Fictional data, S and I over time
