@@ -32,19 +32,41 @@ df=pd.read_csv(os.path.join('data', 'data_by_csa.csv'))
 df=df.dropna(subset=['date'])
 df['date']=df['date'].apply(date_to_datetime)
 
+def load_MSA_for_SI(name, nameCol='CSA Title'):
+    subset=df[df[nameCol].str.contains(name)]
+    assert len(subset[nameCol].unique())==1, f"Invalid name: '{name}' matches either more than 1 or NO values for {nameCol}"
+    
+    subset['s']=subset['population']-subset['cases']
+    subset['i']=subset['population']-subset['s']
+    return subset[['date', 's', 'i']]
 
+
+def SI_chunks(name, nameCol='CSA Title', interval=5):
+    data=load_MSA_for_SI(name)
+    data_sets=[]
+    date_inc=datetime.timedelta(days=interval)
+    start_date=data['date'].min()
+    end_date=data['date'].max()
+    while start_date<end_date:
+        data_sets.append(data[(data['date']>=start_date) & (data['date']<(start_date+date_inc))])
+        start_date+=date_inc
+    return data_sets
+    
 def load_MSA_for_SIR(name, nameCol='CSA Title', infect_time=11):
     '''Pass a string for name: partial string of Census statistical Area.
     e.g. 'New York' yields the New York-Newark, NY-NJ-CT-PA CSA 
     Returns a df with dates, and columns for s, i and r'''
     
     subset=df[df[nameCol].str.contains(name)]
-    assert len(subset[nameCol].unique())==1, f"Invalid name {name} matches either more than 1 or 0 values for {nameCol}"
+    assert len(subset[nameCol].unique())==1, f"Invalid name: '{name}' matches either more than 1 or NO values for {nameCol}"
     
     subset['s']=subset['population']-subset['cases'] #Number of people who haven't had it yet. 
     subset['r']=subset['cases'].shift(infect_time).fillna(0) #assumes that all infections last exactly the length that is passed
     subset['i']=subset['population']-subset['r']-subset['s']
     return subset[['date', 's', 'i', 'r']]
+
+def availMetros(nameCol='CSA Title'):
+    return df[nameCol].unique()
 
 def loadMSA_by_week(name, nameCol='CSA Title'):
     '''Return a list of week-long dataframes for the given area. '''

@@ -11,6 +11,7 @@ import numpy as np
 from pymc3.ode import DifferentialEquation
 import matplotlib.pyplot as plt
 import analyze_metros #
+from pymc3.backends.base import merge_traces
 #from scipy.integrate import odeint     # this is the numerical scheme to integrate if needed
 
 
@@ -24,10 +25,27 @@ def SIR_diffeq(x,t,theta):
             OUTPUTS:
                 dx - 2D vector of derivative at current time
     """
+    dx=[None,None, None]
+    dx[0] = -theta[0]*x[0]*x[1]                   # dS/dt = -beta*S*I
+    dx[1] =  theta[0]*x[0]*x[1] - theta[1]*x[1] # dI/dt = beta*S*I - lambda*I
+    dx[2]=  theta[1]*x[1]
+    return dx
+
+def SI_diffeq(x,t,theta):
+    """ Code up SIR as a differential equation. 
+            INPUTS:
+                x - 2D vector with compartments [S,I] at a single time
+                t - time (unused, but needed for integration later)
+                theta - parameters [beta,lambda] where beta is transition prob. to I, lambda is recovery prob
+            OUTPUTS:
+                dx - 2D vector of derivative at current time
+    """
     dx=[None,None]
     dx[0] = -theta[0]*x[0]*x[1]                   # dS/dt = -beta*S*I
-    dx[1] =  theta[0]*x[0]*x[1] - theta[1]*x[1]   # dI/dt = beta*S*I - lambda*I
+    dx[1] =  theta[0]*x[0]*x[1] #- theta[1]*x[1] # dI/dt = beta*S*I - lambda*I
+    #dx[2]=  theta[1]*x[1]
     return dx
+
 
 def SIR_wDR_diffeq(x,t,theta):
     """ Incorporating detection rate, code up SIR as a differential equation.
@@ -46,26 +64,34 @@ def SIR_wDR_diffeq(x,t,theta):
     S = x[0]
     I = x[1]/theta[2]    # incorporate detection rate to our estimate of I
     dx[0] = -theta[0]*S*I                # dS/dt = -beta*S*I
-    dx[1] =  theta[0]*S*I - theta[1]*I   # dI/dt = beta*S*I - lambda*I
+    dx[1] =  theta[0]*S*I - theta[1]*I # dI/dt = beta*S*I - lambda*I
     return dx
 # %% NEED TO COME BACK TO THIS SECTION TO ACTUALLY USE REAL DATA
 # Set time range
-time_range = np.arange(1,11)     # I'm just using 10 steps
+ # I'm just using 10 steps
 # Load actual data
-data=analyze_metros.load_MSA_for_SIR('New York')
+data_sets=analyze_metros.load_MSA_for_SI('New Orleans')
 
+
+ 
 #X= [np.array([999,997,996,994,993,992,990,989,986,984]),
  #   np.array([1,2,5,6,7,8,9,11,13,15])]     # Fictional data, S and I over time
  
-X=[np.array(data['s']), np.array(data['i'])]
-print (X)
+X=np.array([np.array(data['s'])[7:14], 
+            np.array(data['i'])[7:14]] 
+           )
+    
+
+
+#X=X/pop #code to normalize data to 1
+time_range = np.arange(0,len(X[0]))   
 #%%
 # Create differential equation models
     
 model1 = DifferentialEquation(
          func = SIR_diffeq,   # what is the differential equation? 
          times = time_range,  # what is the time grid for numerical integration?
-         n_states = 2,        # what is the dimensionality of the system?
+         n_states = 3,        # what is the dimensionality of the system?
          n_theta = 2,         # how many parameters are there?
 #         t0 = 0               # are we starting at the beginning?
          )
@@ -78,48 +104,80 @@ model2 = DifferentialEquation(
 #         t0 = 0                   # are we starting at the beginning?
          )
 
+
+model3=DifferentialEquation(
+         func = SI_diffeq,   # what is the differential equation? 
+         times = time_range,  # what is the time grid for numerical integration?
+         n_states = 2,        # what is the dimensionality of the system?
+         n_theta = 1,         # how many parameters are there?
+#         t0 = 0               # are we starting at the beginning?
+         )
+
+
+for       
 # First, fit for model w/o detection rate
-mod = pm.Model()
-with mod:
-    # Set priors
-    beta = pm.Uniform('beta', lower=1E-10, upper=1E-5)  # from literature
-    lam = pm.Uniform('lam', lower=0.01, upper = 1)      # from literature
-    tau = pm.Uniform('tau', lower=1E-8, upper=100)      # from literature... 1/tau is var = noise in data
+    with pm.Model() as mod:
+        # Set priors
+        beta = pm.Uniform('beta', 0, upper=.000001)  # from literature
+        #beta=pm.Lognormal('beta', mu=.001, sigma=1)
+        #beta=pm.Uniform('beta', lower=0, upper=.00001)
+        #lam = pm.Uniform('lam', lower=0.05, upper = .15)     # from literature
+        #tau = pm.Uniform('tau', lower=1E-3, upper=100)      # from literature... 1/tau is var = noise in data
+        #sigma = pm.HalfCauchy('sigma', 1, shape=3)
+        # Implement numerical integration
+        solution = model3(y0=X.T[0], theta=[beta])
+        
+        # Likelihood
+        # May want to come back and use Negative Binomial distribution
+        # May need to adjust the prior distribution for the mean...
+            # Since Poisson distribution has mean=var, can't explore var of data with Bayesian Inf
+        #x_obs =pm.Lognormal('x_obs', mu=solution), sd=sigma, observed = X.T)
+        x_obs=pm.Poisson('x_obs', mu=solution,   observed = X.T)
+        # Trace and MC
+        #step1 = pm.HamiltonianMC([beta,lam,tau], target_accept=0.9)
+        step2=pm.Metropolis([beta])
+        trace = pm.sample(
+                step=[step2], 
+                draws=1000, 
+                tune=500, 
+                cores=1,
+                #chain=i
+                ) 
     
-    # Implement numerical integration
-    solution = model1(y0=[X[0][0],X[1][0]], theta=[beta,lam])
+        
     
-    # Likelihood
-    # May want to come back and use Negative Binomial distribution
-    # May need to adjust the prior distribution for the mean...
-        # Since Poisson distribution has mean=var, can't explore var of data with Bayesian Inf
-    x_obs = pm.Poisson('x_obs', mu=tau, observed = X)
-    
-    # Trace and MC
-    step1 = pm.HamiltonianMC([beta,lam,tau], target_accept=0.9)
-    trace = pm.sample(step=[step1], draws=5000, tune=1000, chains=2)
-    
-beta_samples = trace.get_values('beta',burn=400,thin=5)
-lam_samples = trace.get_values('lam',burn=400,thin=5)
-tau_samples = trace.get_values('tau',burn=400,thin=5)
+     
+        beta_samples = trace.get_values('beta',burn=500,
+                                        thin=5
+                                        )
+        lam_samples = trace.get_values('lam',burn=500,
+                                       thin=5
+                                       )
+        #tau_samples = trace.get_values('tau',burn=400,thin=5)
+        
+        fig, axes = plt.subplots(1,1,sharex=True)
+        axes[0].plot(beta_samples)
+        axes[0].set_ylabel(r'$\beta$')
+        axes[1].plot(lam_samples)
+        axes[1].set_ylabel(r'$\lambda$')
+        #axes[2].plot(tau_samples)
+        #axes[2].set_ylabel(r'$\tau$')
+        axes[1].set_xlabel('Sample #')
+        plt.savefig('trace_results0.png')
+            
+        fig, axes = plt.subplots(1,1)
+        axes[0].hist(beta_samples)   # I don't see a clear mean here...
+        axes[0].set_xlabel(r'$\beta$')
+        
+        
+        print(f'Mean value of Beta: {np.mean(beta_samples)}')
 
-fig, axes = plt.subplots(3,1,sharex=True)
-axes[0].plot(beta_samples)
-axes[0].set_ylabel(r'$\beta$')
-axes[1].plot(lam_samples)
-axes[1].set_ylabel(r'$\lambda$')
-axes[2].plot(tau_samples)
-axes[2].set_ylabel(r'$\tau$')
-axes[2].set_xlabel('Sample #')
-    
-fig, axes = plt.subplots(3,1)
-axes[0].hist(beta_samples)   # I don't see a clear mean here...
-axes[0].set_xlabel(r'$\beta$')
-axes[1].hist(lam_samples)   # I don't see a clear mean here...
-axes[1].set_xlabel(r'$\lambda$')
-axes[2].hist(tau_samples)   # tau is stacked up at 100... I think this is because our particular data has a mean very close to 100
-axes[2].set_xlabel(r'$\tau$')
 
+#%%
+plt.hist(beta_samples)
+plt.savefig('posterior_hist')
+#%%
+'''
 # Now, fit for model w/ detection rate
 mod = pm.Model()
 with mod:
@@ -136,11 +194,11 @@ with mod:
     # May want to come back and use Negative Binomial distribution
     # May need to adjust the prior distribution for the mean...
         # Since Poisson distribution has mean=var, can't explore var of data with Bayesian Inf
-    x_obs = pm.Poisson('x_obs', mu=tau, observed = X)   # note: mu MUST be a pm distribution
+    x_obs =pm.Poisson('x_obs', mu=tau, observed = X)   # note: mu MUST be a pm distribution
     
     # Trace and MC
-    step1 = pm.HamiltonianMC([beta,lam,tau], target_accept=0.9)
-    trace = pm.sample(step=[step1], draws=5000, tune=1000, chains=2)
+    #step1 = pm.HamiltonianMC([beta,lam,tau], target_accept=0.9)
+    trace =  pm.sample(1000, tune=1000, cores=1, chains=1)
 
 beta_samples = trace.get_values('beta',burn=400,thin=5)
 lam_samples = trace.get_values('lam',burn=400,thin=5)
@@ -167,7 +225,7 @@ axes[2].hist(dr_samples)   # I don't see a clear mean here...
 axes[2].set_xlabel('dr')
 axes[3].hist(tau_samples)   # tau is stacked up at 100... I think this is because our particular data has a mean very close to 100
 axes[3].set_xlabel(r'$\tau$')
-
+'''
 
 #%% Notes
 """
